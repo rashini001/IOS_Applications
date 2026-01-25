@@ -1,163 +1,169 @@
-//
-//  GameView.swift
-//  Product01
-//
-//  Created by COBSCCOMP242P-056 on 2026-01-16.
-//
-
 import SwiftUI
 
 struct GameView: View {
-    @StateObject var viewModel: GameViewModel
-    let gridSize: Int
+    @StateObject private var viewModel: GameViewModel
+    @Environment(\.dismiss) var dismiss
+    @State private var isTapped: Bool = false
     
-    private let spacing: CGFloat = 8
-    
-    init(gridSize: Int) {
-        _viewModel = StateObject(wrappedValue: GameViewModel(gridSize: gridSize))
+    private let columns: [GridItem]
+    private let gridSize: Int
+    private let level: String
+
+    init(gridSize: Int, level: String) {
         self.gridSize = gridSize
+        self.level = level
+        let adjustedSize = gridSize % 2 == 0 ? gridSize : gridSize + 1
+        
+        // Initialize StateObject with level
+        _viewModel = StateObject(wrappedValue: GameViewModel(gridSize: gridSize, level: level))
+        
+        // Initialize columns
+        self.columns = Array(
+            repeating: GridItem(.flexible(), spacing: 12),
+            count: adjustedSize
+        )
     }
-    
-    var difficultyName: String {
-        switch gridSize {
-        case 3: return "EASY"
-        case 5: return "MEDIUM"
-        case 7: return "HARD"
-        default: return "CUSTOM"
-        }
-    }
-    
+
     var body: some View {
         ZStack {
-            // MARK: - Background
-            LinearGradient(
-                colors: [Color.black, Color.indigo],
-                startPoint: .top,
-                endPoint: .bottom
-            )
+            LinearGradient(colors: [.black, .indigo],
+                           startPoint: .top,
+                           endPoint: .bottom)
             .ignoresSafeArea()
-            
-            VStack(spacing: 20) {
-                
-                // MARK: - Header / Stats
-                VStack(spacing: 12) {
-                    Text(difficultyName)
+
+            VStack(spacing: 15) {
+                // HUD
+                HStack {
+                    Label("\(viewModel.timeRemaining)", systemImage: "timer")
                         .font(.headline)
-                        .foregroundColor(.white.opacity(0.8))
-                    
-                    HStack(spacing: 30) {
-                        StatBox(title: "SCORE", value: "\(viewModel.score)")
-                        StatBox(title: "MOVES", value: "\(viewModel.moves)")
+                        .foregroundColor(.white)
+
+                    Spacer()
+
+                    Label("\(viewModel.score)", systemImage: "star.fill")
+                        .font(.headline)
+                        .foregroundColor(.yellow)
+
+                    Spacer()
+
+                    Button {
+                        viewModel.showHint()
+                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                    } label: {
+                        Image(systemName: "lightbulb.fill")
+                            .font(.title2)
+                            .foregroundColor(.white)
+                            .padding(8)
+                            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
                     }
                 }
-                .padding(.top)
-                
-                // MARK: - Game Grid
-                LazyVGrid(
-                    columns: Array(
-                        repeating: GridItem(.flexible(), spacing: spacing),
-                        count: gridSize
-                    ),
-                    spacing: spacing
-                ) {
-                    ForEach(viewModel.grid.indices, id: \.self) { index in
-                        let cell = viewModel.grid[index]
-                        
-                        CellView(cell: cell)
+                .padding(.horizontal, 20)
+
+                // Game instruction with level badge
+                HStack {
+                    Text("Match icon AND color!")
+                        .font(.subheadline.bold())
+                        .foregroundColor(.yellow)
+                    
+                    Text("•")
+                        .foregroundColor(.white.opacity(0.5))
+                    
+                    Text(level)
+                        .font(.subheadline.bold())
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 4)
+                        .background(
+                            Capsule()
+                                .fill(levelColor.opacity(0.3))
+                        )
+                        .overlay(
+                            Capsule()
+                                .stroke(levelColor, lineWidth: 1)
+                        )
+                }
+                .padding(.horizontal)
+
+                // Game Grid
+                LazyVGrid(columns: columns, spacing: 12) {
+                    ForEach(viewModel.cells.indices, id: \.self) { index in
+                        CellView(cell: viewModel.cells[index])
                             .onTapGesture {
-                                if !viewModel.isGameOver {
-                                    viewModel.selectCell(index)
-                                }
+                                viewModel.tapCell(at: index)
+                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
                             }
                     }
                 }
                 .padding()
-                
+            }
+
+            // Result Popup
+            if viewModel.showResult {
+                ResultPopupView(isWin: viewModel.isWin) {
+                    viewModel.resetGame()
+                }
+                .environmentObject(viewModel)
+            }
+
+            // Floating action icons
+            VStack {
                 Spacer()
-                
-                // MARK: - Win / Loss Display
-                if viewModel.isGameOver {
-                    VStack(spacing: 16) {
-                        // Header text
-                        Text(viewModel.didWin ? "🎉 YOU WIN!" : "💔 GAME OVER")
-                            .font(.largeTitle)
-                            .fontWeight(.heavy)
-                            .foregroundColor(viewModel.didWin ? .green : .red)
-                        
-                        Text(viewModel.didWin ? "All colors matched successfully!" : "Try again to match all colors!")
-                            .font(.body)
-                            .foregroundColor(.white.opacity(0.85))
-                            .multilineTextAlignment(.center)
-                        
-                        // Score and Moves
-                        HStack(spacing: 20) {
-                            StatBox(title: "FINAL SCORE", value: "\(viewModel.score)")
-                            StatBox(title: "TOTAL MOVES", value: "\(viewModel.moves)")
-                        }
+                HStack(spacing: 40) {
+                    Button {
+                        viewModel.resetGame()
+                    } label: {
+                        Image(systemName: "arrow.clockwise.circle.fill")
+                            .resizable()
+                            .frame(width: 50, height: 50)
+                            .foregroundColor(.green)
+                            .shadow(radius: 5)
+                            .scaleEffect(isTapped ? 0.9 : 1)
+                            .animation(.spring(response: 0.4, dampingFraction: 0.6), value: isTapped)
                     }
-                    .padding()
-                    .frame(maxWidth: .infinity)
-                    .background(
-                        LinearGradient(
-                            colors: viewModel.didWin ? [Color.green.opacity(0.7), Color.green] : [Color.red.opacity(0.7), Color.red],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
+                    .simultaneousGesture(
+                        DragGesture(minimumDistance: 0)
+                            .onChanged { _ in isTapped = true }
+                            .onEnded { _ in isTapped = false }
                     )
-                    .cornerRadius(20)
-                    .shadow(color: .black.opacity(0.3), radius: 8, x: 0, y: 4)
-                    .padding(.horizontal)
-                    .transition(.scale)
-                    .animation(.spring(), value: viewModel.isGameOver)
+
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "house.fill")
+                            .resizable()
+                            .frame(width: 50, height: 50)
+                            .foregroundColor(.blue)
+                            .shadow(radius: 5)
+                    }
+
+                    NavigationLink(destination: LeaderboardView()) {
+                        Image(systemName: "rosette")
+                            .resizable()
+                            .frame(width: 50, height: 50)
+                            .foregroundColor(.yellow)
+                            .shadow(radius: 5)
+                    }
                 }
-                
-                Spacer()
-                
-                // MARK: - Restart Button
-                Button(action: {
-                    viewModel.startNewGame(gridSize: gridSize)
-                }) {
-                    Text("RESTART")
-                        .font(.headline)
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 55)
-                        .background(
-                            LinearGradient(
-                                colors: [Color.blue, Color.cyan],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
-                        )
-                        .cornerRadius(18)
-                        .padding(.horizontal)
-                }
-                .padding(.bottom)
+                .padding(.bottom, 30)
             }
         }
+        .navigationTitle("Match All Pairs")
         .navigationBarTitleDisplayMode(.inline)
+    }
+    
+    // Helper to get level color
+    private var levelColor: Color {
+        switch level {
+        case "Easy": return .green
+        case "Medium": return .orange
+        case "Complex": return .red
+        default: return .white
+        }
     }
 }
 
-// MARK: - Reusable Stat Box (UI only)
-struct StatBox: View {
-    let title: String
-    let value: String
-    
-    var body: some View {
-        VStack(spacing: 6) {
-            Text(title)
-                .font(.caption2)
-                .foregroundColor(.white.opacity(0.7))
-            
-            Text(value)
-                .font(.title3)
-                .fontWeight(.bold)
-                .foregroundColor(.white)
-        }
-        .padding(10)
-        .background(Color.white.opacity(0.1))
-        .cornerRadius(12)
-        .frame(minWidth: 80)
+#Preview {
+    NavigationStack {
+        GameView(gridSize: 3, level: "Easy")
     }
 }

@@ -1,13 +1,10 @@
-//
-//  GameLevel.swift
-//  Product01
-//
-//  Created by COBSCCOMP24.2P-056 on 2026-01-12.
 import SwiftUI
 
-struct ColorModel: Identifiable {
+struct GameCell: Identifiable {
     let id = UUID()
-    let color: Color
+    let icon: String
+    let gradient: LinearGradient
+    let gradientId: Int  // NEW: Add ID to identify matching gradients
+    var isRevealed: Bool = false
     var isMatched: Bool = false
-    var isSelected: Bool = false
 }
